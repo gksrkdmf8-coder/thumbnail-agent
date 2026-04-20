@@ -689,7 +689,7 @@ function compProd(ctx,W,H){
 
 function buildRes(){
   const rg=document.getElementById('rg');rg.innerHTML='';
-  [{lbl:'네이버',nm:'대표이미지',w:1000,h:1000,d:198},{lbl:'네이버',nm:'추가이미지',w:860,h:1100,d:160},{lbl:'쿠팡',nm:'대표이미지',w:1000,h:1000,d:198}]
+  [{lbl:'네이버',nm:'대표이미지',w:1000,h:1000,d:198},{lbl:'쿠팡',nm:'대표이미지',w:1000,h:1000,d:198}]
   .forEach(sp=>{
     const dh=Math.round(sp.d*(sp.h/sp.w));
     const card=document.createElement('div');card.className='r-card';
