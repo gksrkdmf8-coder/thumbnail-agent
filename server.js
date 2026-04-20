@@ -72,7 +72,47 @@ app.get('/api/image', async (req, res) => {
   }
 });
 
-/* ── 커뮤니티 스타일 ────────────────────────────── */
+/* ── Gemini 이미지 생성 API (나노바나나2) ────────── */
+app.post('/api/gemini-image', async (req, res) => {
+  const { geminiKey, imageBase64, imageMimeType, prompt, imageSize = '1K' } = req.body;
+  const key = geminiKey || process.env.GEMINI_API_KEY;
+  if (!key) return res.status(500).json({ error: 'Google API 키가 없습니다. 상단 입력란에 Google API 키를 입력해주세요.' });
+  try {
+    const r = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent?key=${key}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [
+            { text: prompt },
+            { inline_data: { mime_type: imageMimeType || 'image/png', data: imageBase64 } }
+          ]}],
+          generationConfig: {
+            responseModalities: ['IMAGE'],
+            imageConfig: { imageSize }
+          }
+        }),
+        timeout: 90000,
+      }
+    );
+    const data = await r.json();
+    if (r.status === 401 || r.status === 403)
+      return res.status(401).json({ error: 'Google API 키가 올바르지 않습니다.' });
+    if (r.status === 429)
+      return res.status(429).json({ error: 'API 요청 한도 초과. 잠시 후 다시 시도해주세요.' });
+    if (!r.ok)
+      return res.status(r.status).json({ error: data.error?.message || 'Gemini API 오류' });
+    const imagePart = data.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+    if (!imagePart) return res.status(500).json({ error: '이미지 생성 실패. 다시 시도해주세요.' });
+    res.json({ imageData: imagePart.inlineData.data, mimeType: imagePart.inlineData.mimeType });
+  } catch (e) {
+    console.error('Gemini 오류:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+
 app.get('/api/styles', (req, res) => res.json(readData().styles));
 
 app.post('/api/styles', (req, res) => {
