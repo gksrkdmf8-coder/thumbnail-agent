@@ -400,15 +400,15 @@ const TC={};
 
 const CONC=[
   {id:'studio',name:'미니멀 스튜디오',desc:'깔끔한 스튜디오 배경',sw:'#ebebeb',
-   pt:'professional product photography, clean white minimalist studio background, {P}, soft box lighting, commercial, ultra sharp'},
+   pt:'clean minimalist studio background, soft white seamless backdrop, soft box lighting, light gray gradient surface, professional commercial photography background, empty'},
   {id:'life',name:'라이프스타일',desc:'감각적인 생활 연출',sw:'#f5e2c8',
-   pt:'lifestyle product photography, {P}, cozy interior, warm tones, natural light, editorial styled scene'},
+   pt:'cozy interior lifestyle background, warm tones, natural window light, wooden surface tabletop, blurred home decor background, empty scene'},
   {id:'lux',name:'럭셔리 다크',desc:'프리미엄 다크 무드',sw:'#1e1e1e',
-   pt:'luxury product photography, {P}, dark dramatic background, golden rim lighting, high-end, elegant'},
+   pt:'luxury dark dramatic background, deep black surface, golden rim light reflection, premium moody atmosphere, high-end editorial background, empty'},
   {id:'nat',name:'자연 아웃도어',desc:'자연광 아웃도어',sw:'#c0dba8',
-   pt:'outdoor product photography, {P}, fresh natural environment, botanical background, soft golden light'},
+   pt:'fresh outdoor natural background, botanical green leaves, soft golden sunlight, nature environment backdrop, empty wooden surface, no product'},
   {id:'tbl',name:'감성 테이블탑',desc:'소품 활용 테이블 연출',sw:'#eeddc4',
-   pt:'flat lay product photography, {P}, styled tabletop, aesthetic props, warm natural light, Korean e-commerce'},
+   pt:'aesthetic tabletop flat lay background, warm natural light, linen fabric surface, minimal props around empty center, Korean e-commerce style background'},
   {id:'cst',name:'직접 입력',desc:'배경 직접 설정',sw:'#dbeeff',custom:true},
 ];
 
@@ -623,16 +623,18 @@ async function analyzeImg(){
 /* ── AI 연출 사진 생성 ── */
 async function genStage(){
   const lt=document.getElementById('s-lt').value,md=document.getElementById('s-md').value,ra=document.getElementById('s-ra').value;
-  const prod=S.prodDesc||'product item';
   let prompt;
+  // 제품 설명 제외 — 배경/환경만 생성 (누끼는 Canvas로 합성)
   if(S.selCommId||CONC[S.selC].custom){
     const ct=document.getElementById('cust-p').value||'clean white background';
-    prompt=`professional product photography, ${prod}, ${ct}`;
+    prompt=`${ct}, empty scene, no product, no object in center`;
   }else{
-    prompt=CONC[S.selC].pt.replace('{P}',prod);
+    // 제품({P}) 제거하고 배경 환경만 남김
+    prompt=CONC[S.selC].pt.replace(', {P},',',').replace('{P},','').replace(', {P}','').replace('{P}','');
+    prompt+=', empty background scene, no product placed, no object in foreground';
   }
   if(lt)prompt+=`, ${lt}`;if(md)prompt+=`, ${md}`;
-  prompt+=', no text, no watermark, no labels, high quality commercial product photography';
+  prompt+=', high quality commercial background, no watermark, no text, photorealistic';
   const W=1024,H=ra==='portrait'?1280:1024;
 
   document.getElementById('gen-btn').disabled=true;
