@@ -193,13 +193,20 @@ input,select,textarea{font-family:inherit}
   <div class="hdr-logo">썸네일 에이전트</div>
   <div class="hdr-sub">이커머스 썸네일 자동 생성</div>
   <div class="api-key-wrap">
-    <span class="api-key-label">API 키</span>
+    <span class="api-key-label">Anthropic</span>
     <input type="password" class="api-key-input" id="api-key-input"
       placeholder="sk-ant-api03-..."
       oninput="onApiKeyInput(this.value)"
       autocomplete="off">
     <span class="api-saved-badge" id="api-saved-badge">✓ 저장됨</span>
     <button class="api-key-clear" id="api-key-clear" onclick="clearApiKey()">삭제</button>
+    <span class="api-key-label" style="margin-left:8px">Google</span>
+    <input type="password" class="api-key-input" id="gemini-key-input"
+      placeholder="AIza..."
+      oninput="onGeminiKeyInput(this.value)"
+      autocomplete="off">
+    <span class="api-saved-badge" id="gemini-saved-badge">✓ 저장됨</span>
+    <button class="api-key-clear" id="gemini-key-clear" onclick="clearGeminiKey()">삭제</button>
   </div>
   <div class="hdr-stats">
     <div class="sc-chip">누적 생성 <b id="cnt-lbl">-</b>개</div>
@@ -313,7 +320,7 @@ input,select,textarea{font-family:inherit}
 
     <button class="gen-btn" id="gen-btn" onclick="genStage()">✦ AI 연출 사진 생성</button>
     <div class="gen-info">
-      <span>Powered by Pollinations AI · Flux model · private=true (비공개)</span>
+      <span>AI 엔진: Google 나노바나나2 (Gemini 3.1 Flash Image) · Pollinations AI 폴백</span>
     </div>
   </div>
 
@@ -395,7 +402,7 @@ input,select,textarea{font-family:inherit}
 <div class="toast" id="toast"></div>
 
 <script>
-const S={raw:null,mime:null,img:null,fname:'',genImg:null,prodDesc:'',selC:0,selCommId:null,badge:'BEST',tmpl:'clean',tab:'all',usingGen:false};
+const S={raw:null,mime:null,img:null,fname:'',genImg:null,prodDesc:'',selC:0,selCommId:null,badge:'BEST',tmpl:'clean',tab:'all',usingGen:false,geminiComposited:false};
 const TC={};
 
 const CONC=[
@@ -420,9 +427,13 @@ function visPlat(){if(S.tab==='naver')return PLAT.naver;if(S.tab==='coupang')ret
 
 /* ── API 키 관리 ── */
 const API_KEY_STORE = 'thumbnail_agent_api_key';
+const GEMINI_KEY_STORE = 'thumbnail_agent_gemini_key';
 
 function getApiKey() {
   return document.getElementById('api-key-input').value.trim() || localStorage.getItem(API_KEY_STORE) || '';
+}
+function getGeminiKey() {
+  return document.getElementById('gemini-key-input').value.trim() || localStorage.getItem(GEMINI_KEY_STORE) || '';
 }
 
 function onApiKeyInput(val) {
@@ -438,13 +449,32 @@ function onApiKeyInput(val) {
     document.getElementById('api-key-clear').style.display = v ? 'inline' : 'none';
   }
 }
-
+function onGeminiKeyInput(val) {
+  const v = val.trim();
+  if (v.startsWith('AIza') && v.length > 20) {
+    localStorage.setItem(GEMINI_KEY_STORE, v);
+    document.getElementById('gemini-key-input').classList.add('saved');
+    document.getElementById('gemini-saved-badge').style.display = 'inline';
+    document.getElementById('gemini-key-clear').style.display = 'inline';
+  } else {
+    document.getElementById('gemini-key-input').classList.remove('saved');
+    document.getElementById('gemini-saved-badge').style.display = 'none';
+    document.getElementById('gemini-key-clear').style.display = v ? 'inline' : 'none';
+  }
+}
 function clearApiKey() {
   localStorage.removeItem(API_KEY_STORE);
   document.getElementById('api-key-input').value = '';
   document.getElementById('api-key-input').classList.remove('saved');
   document.getElementById('api-saved-badge').style.display = 'none';
   document.getElementById('api-key-clear').style.display = 'none';
+}
+function clearGeminiKey() {
+  localStorage.removeItem(GEMINI_KEY_STORE);
+  document.getElementById('gemini-key-input').value = '';
+  document.getElementById('gemini-key-input').classList.remove('saved');
+  document.getElementById('gemini-saved-badge').style.display = 'none';
+  document.getElementById('gemini-key-clear').style.display = 'none';
 }
 
 // 페이지 로드 시 저장된 키 복원
@@ -455,6 +485,13 @@ function clearApiKey() {
     document.getElementById('api-key-input').classList.add('saved');
     document.getElementById('api-saved-badge').style.display = 'inline';
     document.getElementById('api-key-clear').style.display = 'inline';
+  }
+  const gSaved = localStorage.getItem(GEMINI_KEY_STORE);
+  if (gSaved) {
+    document.getElementById('gemini-key-input').value = gSaved;
+    document.getElementById('gemini-key-input').classList.add('saved');
+    document.getElementById('gemini-saved-badge').style.display = 'inline';
+    document.getElementById('gemini-key-clear').style.display = 'inline';
   }
 })();
 
@@ -621,45 +658,74 @@ async function analyzeImg(){
 }
 
 /* ── AI 연출 사진 생성 ── */
+/* ── 나노바나나2 스타일별 프롬프트 ── */
+const GEMINI_PROMPTS = {
+  studio: '첨부한 제품 이미지를 깔끔한 미니멀 스튜디오 배경에 자연스럽게 합성해주세요. 소프트박스 조명, 밝은 흰색 또는 연한 회색 배경. 제품의 형태·색상·텍스트를 정확히 유지하고, 바닥 그림자와 반사를 자연스럽게 표현해주세요. 상업용 이커머스 제품 사진 스타일.',
+  life:   '첨부한 제품 이미지를 감각적인 라이프스타일 인테리어 공간에 자연스럽게 합성해주세요. 따뜻한 자연광, 우드 소재 선반이나 테이블. 제품의 형태·색상·텍스트를 정확히 유지하고, 공간감 있는 조명으로 제품이 돋보이게 표현해주세요.',
+  lux:    '첨부한 제품 이미지를 럭셔리 다크 무드 배경에 자연스럽게 합성해주세요. 딥 블랙 또는 다크 그레이 배경, 골든 림 조명, 프리미엄 질감. 제품의 형태·색상·텍스트를 정확히 유지하고, 고급스러운 반사와 하이라이트를 표현해주세요.',
+  nat:    '첨부한 제품 이미지를 싱그러운 자연 아웃도어 환경에 자연스럽게 합성해주세요. 식물과 나뭇잎, 부드러운 햇살, 나무나 돌 표면. 제품의 형태·색상·텍스트를 정확히 유지하고, 자연광의 따뜻하고 신선한 느낌을 살려주세요.',
+  tbl:    '첨부한 제품 이미지를 감성적인 테이블탑 연출로 자연스럽게 합성해주세요. 린넨 패브릭, 작은 소품들, 따뜻한 자연광. 제품의 형태·색상·텍스트를 정확히 유지하고, 플랫레이 또는 살짝 비스듬한 구도로 연출해주세요.',
+};
+
 async function genStage(){
-  const lt=document.getElementById('s-lt').value,md=document.getElementById('s-md').value,ra=document.getElementById('s-ra').value;
-  let prompt;
-  // 제품 설명 제외 — 배경/환경만 생성 (누끼는 Canvas로 합성)
-  if(S.selCommId||CONC[S.selC].custom){
-    const ct=document.getElementById('cust-p').value||'clean white background';
-    prompt=`${ct}, empty scene, no product, no object in center`;
-  }else{
-    // 제품({P}) 제거하고 배경 환경만 남김
-    prompt=CONC[S.selC].pt.replace(', {P},',',').replace('{P},','').replace(', {P}','').replace('{P}','');
-    prompt+=', empty background scene, no product placed, no object in foreground';
-  }
-  if(lt)prompt+=`, ${lt}`;if(md)prompt+=`, ${md}`;
-  prompt+=', high quality commercial background, no watermark, no text, photorealistic';
-  const W=1024,H=ra==='portrait'?1280:1024;
+  const lt=document.getElementById('s-lt').value,md=document.getElementById('s-md').value;
+  const geminiKey = getGeminiKey();
 
   document.getElementById('gen-btn').disabled=true;
   const pg=document.getElementById('st-prog');pg.classList.add('on');
-  document.getElementById('st-ptxt').textContent='AI가 연출 배경을 생성하는 중... (최대 40초)';
   document.getElementById('st-res').classList.remove('on');
   document.getElementById('atb').style.display='none';
+  S.geminiComposited = false;
 
-  const seed=Math.floor(Math.random()*99999);
-  const url=`/api/image?prompt=${encodeURIComponent(prompt)}&width=${W}&height=${H}&seed=${seed}`;
+  // ── 나노바나나2 (Google API 키 있을 때) ──
+  if(geminiKey && S.raw){
+    document.getElementById('st-ptxt').textContent='🍌 나노바나나2가 제품을 분석하고 합성 중... (최대 60초)';
+    try {
+      const cid = CONC[S.selC]?.id || 'studio';
+      let basePrompt = GEMINI_PROMPTS[cid] || GEMINI_PROMPTS.studio;
+      if(S.selCommId || CONC[S.selC]?.custom){
+        const ct = document.getElementById('cust-p').value || 'clean white background';
+        basePrompt = `첨부한 제품 이미지를 ${ct} 배경에 자연스럽게 합성해주세요. 제품의 형태·색상·텍스트를 정확히 유지하고, 자연스러운 조명과 그림자를 표현해주세요.`;
+      }
+      if(lt) basePrompt += ` 조명: ${lt}.`;
+      if(md) basePrompt += ` 분위기: ${md}.`;
+      basePrompt += ' 이미지 크기: 1024x1024. 제품을 중앙에 배치해주세요.';
 
-  await new Promise(resolve=>{
-    const img=new Image();let done=false;
-    const finish=i=>{if(done)return;done=true;S.genImg=i;resolve();};
-    img.onload=()=>finish(img);
-    img.onerror=()=>{
-      document.getElementById('st-ptxt').textContent='캔버스 합성으로 대체 생성 중...';
-      const c=document.createElement('canvas');c.width=W;c.height=H;
-      const ctx=c.getContext('2d');
-      drawFB(ctx,W,H,CONC[S.selC].id);compProd(ctx,W,H);
-      const fb=new Image();fb.onload=()=>finish(fb);fb.src=c.toDataURL('image/jpeg',.92);
-    };
-    img.src=url;
-    setTimeout(()=>{if(!done)img.onerror();},45000);
-  });
+      const r = await fetch('/api/gemini-image', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          geminiKey,
+          imageBase64: S.raw,
+          imageMimeType: S.mime,
+          prompt: basePrompt,
+          imageSize: '1K'
+        })
+      });
+      const data = await r.json();
+      if(!r.ok) throw new Error(data.error || '나노바나나2 생성 실패');
+
+      const composited = new Image();
+      await new Promise((resolve, reject) => {
+        composited.onload = resolve;
+        composited.onerror = reject;
+        composited.src = `data:${data.mimeType};base64,${data.imageData}`;
+      });
+      S.genImg = composited;
+      S.geminiComposited = true;
+      document.getElementById('st-ptxt').textContent='나노바나나2 합성 완료!';
+
+    } catch(e) {
+      toast('나노바나나2 오류: ' + e.message + ' — Pollinations로 대체합니다.');
+      S.geminiComposited = false;
+      await genWithPollinations(lt, md);
+    }
+
+  // ── Pollinations 폴백 (Google 키 없을 때) ──
+  } else {
+    if(!geminiKey) toast('💡 Google API 키를 입력하면 나노바나나2로 고품질 합성이 가능합니다.');
+    await genWithPollinations(lt, md);
+  }
 
   const cnt=await incCount();
   document.getElementById('cnt-lbl').textContent=cnt.toLocaleString();
@@ -667,6 +733,35 @@ async function genStage(){
   pg.classList.remove('on');
   document.getElementById('st-res').classList.add('on');
   document.getElementById('gen-btn').disabled=false;
+}
+
+async function genWithPollinations(lt, md){
+  document.getElementById('st-ptxt').textContent='Pollinations AI가 배경을 생성하는 중... (최대 40초)';
+  const cid = CONC[S.selC]?.id || 'studio';
+  let prompt = CONC[S.selC]?.pt
+    ? CONC[S.selC].pt.replace(', {P},',',').replace('{P},','').replace(', {P}','').replace('{P}','')
+    : 'clean studio background, empty';
+  if(S.selCommId || CONC[S.selC]?.custom){
+    prompt = (document.getElementById('cust-p').value||'clean white background') + ', empty scene, no product';
+  }
+  prompt += ', empty background, no product, high quality, photorealistic';
+  if(lt) prompt+=`, ${lt}`; if(md) prompt+=`, ${md}`;
+  const W=1024, H=1024;
+  const seed=Math.floor(Math.random()*99999);
+  const url=`/api/image?prompt=${encodeURIComponent(prompt)}&width=${W}&height=${H}&seed=${seed}`;
+  await new Promise(resolve=>{
+    const img=new Image(); let done=false;
+    const finish=i=>{if(done)return;done=true;S.genImg=i;resolve();};
+    img.onload=()=>finish(img);
+    img.onerror=()=>{
+      const c=document.createElement('canvas');c.width=W;c.height=H;
+      const ctx=c.getContext('2d');
+      drawFB(ctx,W,H,cid); compProd(ctx,W,H);
+      const fb=new Image();fb.onload=()=>finish(fb);fb.src=c.toDataURL('image/jpeg',.92);
+    };
+    img.src=url;
+    setTimeout(()=>{if(!done)img.onerror();},45000);
+  });
 }
 
 function drawFB(ctx,W,H,cid){
@@ -704,7 +799,8 @@ function buildRes(){
       let sw,sh,sx,sy;
       if(ir>tr){sh=H;sw=H*ir;sx=(W-sw)/2;sy=0;}else{sw=W;sh=W/ir;sx=0;sy=(H-sh)/2;}
       ctx.drawImage(S.genImg,sx,sy,sw,sh);
-      if(S.img){
+      // 나노바나나2 결과는 이미 합성 완료 — Canvas 재합성 불필요
+      if(!S.geminiComposited && S.img){
         // ② 제품 크기/위치 계산
         const m=W*.08,mW=W-m*2,mH=H-m*2,r=S.img.width/S.img.height;
         let dw,dh2;
